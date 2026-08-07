@@ -9,7 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
@@ -41,7 +41,6 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 @Composable
 fun GenerateScreen(
     viewModel: GenerateViewModel,
-    serverUrl: String,
     navController: NavController
 ) {
     val context = LocalContext.current
@@ -104,11 +103,6 @@ fun GenerateScreen(
         topBar = {
             TopAppBar(
                 title = { Text("إنشاء فيديو Novora") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
-                    }
-                },
                 actions = {
                     IconButton(onClick = { navController.navigate("history") }) {
                         Icon(Icons.Default.History, contentDescription = "سجل الفيديوهات")
@@ -138,7 +132,7 @@ fun GenerateScreen(
                         readOnly = true,
                         label = { Text("اختر النموذج") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,
@@ -154,6 +148,20 @@ fun GenerateScreen(
                             )
                         }
                     }
+                }
+            }
+
+            item {
+                Button(
+                    onClick = { navController.navigate("connect/${viewModel.selectedModel}") },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (viewModel.serverUrl.isNotBlank()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(Icons.Default.Router, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (viewModel.serverUrl.isNotBlank()) "متصل بالخادم - تغيير" else "الاتصال بالخادم")
                 }
             }
 
@@ -197,7 +205,7 @@ fun GenerateScreen(
 
             item {
                 Button(
-                    onClick = { viewModel.generateVideo(serverUrl, context) },
+                    onClick = { viewModel.generateVideo(context) },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     enabled = viewModel.imageUri != null && viewModel.audioUri != null && !viewModel.isGenerating
                 ) {

@@ -1,5 +1,7 @@
 package com.example.ui.connect
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -9,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -16,11 +19,19 @@ import androidx.navigation.NavController
 @Composable
 fun ConnectScreen(
     viewModel: ConnectViewModel,
+    selectedModel: String,
     navController: NavController
 ) {
     val serverUrl = viewModel.serverUrl
     val isConnecting = viewModel.isConnecting
     val errorMessage = viewModel.errorMessage
+    val context = LocalContext.current
+
+    val colabLinks = mapOf(
+        "SadTalker" to "https://colab.research.google.com/github/m5ham3ds/SadTalker/blob/main/SadTalker.ipynb",
+        "EchoMimicV3" to "https://colab.research.google.com/github/m5ham3ds/echomimic_v3/blob/main/EchoMimicvt.ipynb",
+        "V-Express" to "https://colab.research.google.com/github/m5ham3ds/V-Expresss/blob/main/V_Express.ipynb"
+    )
 
     val isError = (errorMessage != null) || (serverUrl.isNotEmpty() && !serverUrl.contains(".gradio.live"))
     val isUrlValid = serverUrl.contains(".gradio.live") && serverUrl.isNotBlank()
@@ -100,8 +111,23 @@ fun ConnectScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("الاتصال بالخادم")
+                    Text("تأكيد الاتصال بالخادم")
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = { 
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(colabLinks[selectedModel] ?: colabLinks["SadTalker"]))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                Text("تشغيل $selectedModel على Colab")
             }
             
             Spacer(modifier = Modifier.height(48.dp))

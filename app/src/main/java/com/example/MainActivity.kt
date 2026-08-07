@@ -19,8 +19,6 @@ import com.example.ui.generate.GenerateViewModel
 import com.example.ui.history.HistoryScreen
 import com.example.ui.history.HistoryViewModel
 import com.example.ui.theme.MyApplicationTheme
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,22 +40,20 @@ class MainActivity : ComponentActivity() {
 fun NovoraApp() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "connect") {
-        composable("connect") {
-            val connectViewModel: ConnectViewModel = viewModel(factory = ConnectViewModel.Factory)
-            ConnectScreen(
-                viewModel = connectViewModel,
-                navController = navController
-            )
-        }
-        composable("generate?serverUrl={serverUrl}") { backStackEntry ->
-            val encodedUrl = backStackEntry.arguments?.getString("serverUrl") ?: ""
-            val baseUrl = URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString())
-            
+    NavHost(navController = navController, startDestination = "generate") {
+        composable("generate") {
             val generateViewModel: GenerateViewModel = viewModel(factory = GenerateViewModel.Factory)
             GenerateScreen(
                 viewModel = generateViewModel,
-                serverUrl = baseUrl,
+                navController = navController
+            )
+        }
+        composable("connect/{selectedModel}") { backStackEntry ->
+            val selectedModel = backStackEntry.arguments?.getString("selectedModel") ?: "SadTalker"
+            val connectViewModel: ConnectViewModel = viewModel(factory = ConnectViewModel.Factory)
+            ConnectScreen(
+                viewModel = connectViewModel,
+                selectedModel = selectedModel,
                 navController = navController
             )
         }

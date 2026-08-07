@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import com.example.utils.dataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -19,7 +19,6 @@ import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-val Context.dataStore by preferencesDataStore(name = "novora_prefs")
 
 class ConnectViewModel(private val context: Context) : ViewModel() {
     companion object {
@@ -71,11 +70,7 @@ class ConnectViewModel(private val context: Context) : ViewModel() {
             context.dataStore.edit { prefs ->
                 prefs[URL_KEY] = finalUrl
             }
-            // Navigate
-            val encoded = URLEncoder.encode(finalUrl, StandardCharsets.UTF_8.toString())
-            navController.navigate("generate?serverUrl=$encoded") {
-                popUpTo("connect") { inclusive = true }
-            }
+            navController.popBackStack()
             isConnecting = false
         }
     }

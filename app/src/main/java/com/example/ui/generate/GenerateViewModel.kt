@@ -10,11 +10,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.data.db.HistoryDatabase
 import com.example.data.model.HistoryRecord
 import com.example.data.repository.HistoryRepository
 import com.example.data.repository.NovoraRepository
 import com.example.utils.FileUtils
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
+import com.example.utils.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -32,9 +36,19 @@ class GenerateViewModel(private val application: Application) : ViewModel() {
     }
 
     private val historyRepository: HistoryRepository
+    private val URL_KEY = stringPreferencesKey("server_url")
+    var serverUrl by mutableStateOf("")
+        private set
+
     init {
         val historyDao = HistoryDatabase.getDatabase(application).historyDao()
         historyRepository = HistoryRepository(historyDao)
+        
+        viewModelScope.launch {
+            application.dataStore.data.collectLatest { prefs ->
+                serverUrl = prefs[URL_KEY] ?: ""
+            }
+        }
     }
 
     var selectedModel by mutableStateOf("SadTalker")
@@ -74,7 +88,11 @@ class GenerateViewModel(private val application: Application) : ViewModel() {
         statusMessage = "جاهز للتوليد"
     }
 
-    fun generateVideo(serverUrl: String, context: Context) {
+    fun generateVideo(context: Context) {
+        if (serverUrl.isBlank()) {
+            errorMessage = "يرجى الاتصال بالخادم أولاً"
+            return
+        }
         if (imageUri == null || audioUri == null) {
             errorMessage = "يرجى اختيار صورة وملف صوتي"
             return

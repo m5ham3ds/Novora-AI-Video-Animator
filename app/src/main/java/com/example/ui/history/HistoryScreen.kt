@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
@@ -39,7 +39,7 @@ fun HistoryScreen(
                 title = { Text("سجل الفيديوهات") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
                     }
                 }
             )
