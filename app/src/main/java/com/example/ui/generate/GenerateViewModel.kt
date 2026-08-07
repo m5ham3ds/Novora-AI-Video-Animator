@@ -1,20 +1,23 @@
 package com.example.ui.generate
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.example.data.db.HistoryDatabase
+import com.example.data.model.HistoryRecord
+import com.example.data.repository.HistoryRepository
 import com.example.data.repository.NovoraRepository
 import com.example.utils.FileUtils
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-
-enum class GenerateState {
-    IDLE, LOADING, SUCCESS, ERROR
-}
+import kotlinx.coroutines.withContext
 
 class GenerateViewModel(private val application: Application) : ViewModel() {
 
@@ -28,65 +31,98 @@ class GenerateViewModel(private val application: Application) : ViewModel() {
         }
     }
 
-    private val _imageUri = MutableStateFlow<Uri?>(null)
-    val imageUri = _imageUri.asStateFlow()
-
-    private val _audioUri = MutableStateFlow<Uri?>(null)
-    val audioUri = _audioUri.asStateFlow()
-
-    private val _selectedModel = MutableStateFlow("EchoMimicV3")
-    val selectedModel = _selectedModel.asStateFlow()
-
-    private val _state = MutableStateFlow(GenerateState.IDLE)
-    val state = _state.asStateFlow()
-
-    private val _videoUrl = MutableStateFlow<String?>(null)
-    val videoUrl = _videoUrl.asStateFlow()
-
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage = _errorMessage.asStateFlow()
-
-    fun setImageUri(uri: Uri?) {
-        _imageUri.value = uri
+    private val historyRepository: HistoryRepository
+    init {
+        val historyDao = HistoryDatabase.getDatabase(application).historyDao()
+        historyRepository = HistoryRepository(historyDao)
     }
 
-    fun setAudioUri(uri: Uri?) {
-        _audioUri.value = uri
+    var selectedModel by mutableStateOf("SadTalker")
+        private set
+    var imageUri by mutableStateOf<Uri?>(null)
+        private set
+    var audioUri by mutableStateOf<Uri?>(null)
+        private set
+    var audioFileName by mutableStateOf<String?>(null)
+        private set
+    var videoUrl by mutableStateOf<String?>(null)
+        private set
+    var isGenerating by mutableStateOf(false)
+        private set
+    var statusMessage by mutableStateOf("جاهز للتوليد")
+        private set
+    var errorMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun selectModel(model: String) {
+        selectedModel = model
     }
 
-    fun setSelectedModel(model: String) {
-        _selectedModel.value = model
+    fun selectImage(uri: Uri) {
+        imageUri = uri
+        errorMessage = null
     }
 
-    fun generateVideo(baseUrl: String) {
-        val imgUri = _imageUri.value
-        val audUri = _audioUri.value
-        if (imgUri == null || audUri == null) {
-            _errorMessage.value = "يرجى اختيار صورة وملف صوتي"
+    fun selectAudio(uri: Uri, fileName: String) {
+        audioUri = uri
+        audioFileName = fileName
+        errorMessage = null
+    }
+
+    fun clearVideo() {
+        videoUrl = null
+        statusMessage = "جاهز للتوليد"
+    }
+
+    fun generateVideo(serverUrl: String, context: Context) {
+        if (imageUri == null || audioUri == null) {
+            errorMessage = "يرجى اختيار صورة وملف صوتي"
             return
         }
 
-        val imageFile = FileUtils.uriToFile(application, imgUri)
-        val audioFile = FileUtils.uriToFile(application, audUri)
+        viewModelScope.launch(Dispatchers.IO) {
+            isGenerating = true
+            errorMessage = null
+            statusMessage = "جارٍ قراءة الملفات..."
 
-        if (imageFile == null || audioFile == null) {
-            _errorMessage.value = "فشل في قراءة الملفات"
-            return
-        }
+            val imageFile = FileUtils.uriToFile(context, imageUri!!)
+            val audioFile = FileUtils.uriToFile(context, audioUri!!)
 
-        viewModelScope.launch {
-            _state.value = GenerateState.LOADING
-            _errorMessage.value = null
+            if (imageFile == null || audioFile == null) {
+                errorMessage = "فشل في قراءة الملفات"
+                isGenerating = false
+                return@launch
+            }
 
-            val repository = NovoraRepository(baseUrl)
-            val result = repository.generateVideo(imageFile, audioFile, _selectedModel.value)
+            statusMessage = "جارٍ رفع الملفات وتوليد الفيديو (قد يستغرق عدة دقائق)..."
 
-            if (result.isSuccess) {
-                _videoUrl.value = result.getOrNull()
-                _state.value = GenerateState.SUCCESS
-            } else {
-                _errorMessage.value = result.exceptionOrNull()?.message ?: "خطأ غير معروف"
-                _state.value = GenerateState.ERROR
+            val repository = NovoraRepository(serverUrl)
+            val result = repository.generateVideo(imageFile, audioFile, selectedModel)
+
+            withContext(Dispatchers.Main) {
+                if (result.isSuccess) {
+                    val url = result.getOrNull()
+                    videoUrl = url
+                    statusMessage = "تم التوليد بنجاح"
+                    
+                    // Save to history in background
+                    viewModelScope.launch(Dispatchers.IO) {
+                        url?.let {
+                            historyRepository.insert(
+                                HistoryRecord(
+                                    videoPath = it,
+                                    thumbnailPath = "", // No thumbnail API provided
+                                    modelUsed = selectedModel,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    errorMessage = result.exceptionOrNull()?.message ?: "فشل توليد الفيديو، تأكد من الرابط"
+                    statusMessage = "فشل التوليد"
+                }
+                isGenerating = false
             }
         }
     }

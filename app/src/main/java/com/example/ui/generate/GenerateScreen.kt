@@ -1,165 +1,303 @@
 package com.example.ui.generate
 
-import android.app.DownloadManager
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import android.os.Environment
-import android.widget.Toast
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import android.app.DownloadManager
+import android.os.Environment
+import android.widget.Toast
 
-@OptIn(ExperimentalMaterial3Api::class)
+import android.Manifest
+import android.os.Build
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun GenerateScreen(
     viewModel: GenerateViewModel,
-    baseUrl: String,
-    onBack: () -> Unit
+    serverUrl: String,
+    navController: NavController
 ) {
-    val imageUri by viewModel.imageUri.collectAsStateWithLifecycle()
-    val audioUri by viewModel.audioUri.collectAsStateWithLifecycle()
-    val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val videoUrl by viewModel.videoUrl.collectAsStateWithLifecycle()
-    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        listOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.READ_MEDIA_VIDEO
+        )
+    } else {
+        listOf(
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        )
+    }
+
+    val multiplePermissionsState = rememberMultiplePermissionsState(permissionsToRequest)
 
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> viewModel.setImageUri(uri) }
+    ) { uri: Uri? ->
+        uri?.let {
+            if (getFileSize(context, it) <= 5 * 1024 * 1024) {
+                viewModel.selectImage(it)
+            } else {
+                Toast.makeText(context, "الصورة تتجاوز 5 ميجابايت", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> viewModel.setAudioUri(uri) }
+    ) { uri: Uri? ->
+        uri?.let {
+            if (getFileSize(context, it) <= 10 * 1024 * 1024) {
+                val name = getFileName(context, it)
+                viewModel.selectAudio(it, name ?: "ملف صوتي")
+            } else {
+                Toast.makeText(context, "الصوت يتجاوز 10 ميجابايت", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
-    val models = listOf("EchoMimicV3", "V-Express", "SadTalker")
-    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!multiplePermissionsState.allPermissionsGranted) {
+            multiplePermissionsState.launchMultiplePermissionRequest()
+        }
+    }
+
+    LaunchedEffect(viewModel.errorMessage) {
+        viewModel.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Create Your Video") },
+                title = { Text("إنشاء فيديو Novora") },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("رجوع") }
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { navController.navigate("history") }) {
+                        Icon(Icons.Default.History, contentDescription = "سجل الفيديوهات")
+                    }
                 }
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Model Selector
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedTextField(
-                    value = selectedModel,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("اختر النموذج") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
-                )
-                ExposedDropdownMenu(
+            item {
+                var expanded by remember { mutableStateOf(false) }
+                val models = listOf("EchoMimicV3", "V-Express", "SadTalker")
+                
+                ExposedDropdownMenuBox(
                     expanded = expanded,
-                    onDismissRequest = { expanded = false }
+                    onExpandedChange = { expanded = !expanded }
                 ) {
-                    models.forEach { model ->
-                        DropdownMenuItem(
-                            text = { Text(model) },
-                            onClick = {
-                                viewModel.setSelectedModel(model)
-                                expanded = false
-                            }
+                    OutlinedTextField(
+                        value = viewModel.selectedModel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("اختر النموذج") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        models.forEach { model ->
+                            DropdownMenuItem(
+                                text = { Text(model) },
+                                onClick = {
+                                    viewModel.selectModel(model)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clickable { imagePicker.launch("image/*") },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    if (viewModel.imageUri == null) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("اضغط لاختيار صورة للوجه")
+                        }
+                    } else {
+                        AsyncImage(
+                            model = viewModel.imageUri,
+                            contentDescription = "Selected Image",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // File Pickers
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Button(onClick = { imagePicker.launch("image/*") }) {
-                    Text(if (imageUri != null) "الصورة ✅" else "رفع صورة")
-                }
-                Button(onClick = { audioPicker.launch("audio/*") }) {
-                    Text(if (audioUri != null) "الصوت ✅" else "رفع صوت")
+            item {
+                OutlinedButton(
+                    onClick = { audioPicker.launch("audio/*") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (viewModel.audioUri == null) "اختر ملف صوتي (WAV/MP3)" else "✓ ${viewModel.audioFileName}")
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Generate Button
-            Button(
-                onClick = { viewModel.generateVideo(baseUrl) },
-                enabled = state != GenerateState.LOADING,
-                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("generate_button")
-            ) {
-                Text("Generate Video")
+            item {
+                Button(
+                    onClick = { viewModel.generateVideo(serverUrl, context) },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    enabled = viewModel.imageUri != null && viewModel.audioUri != null && !viewModel.isGenerating
+                ) {
+                    Text("بدء إنشاء الفيديو")
+                }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Status and Results
-            when (state) {
-                GenerateState.LOADING -> {
-                    CircularProgressIndicator()
+            if (viewModel.isGenerating) {
+                item {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("جارٍ توليد الفيديو، قد يستغرق هذا عدة دقائق...")
+                    Text(
+                        text = viewModel.statusMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-                GenerateState.ERROR -> {
-                    Text(text = "خطأ: $errorMessage", color = MaterialTheme.colorScheme.error)
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().height(220.dp)
+                ) {
+                    if (viewModel.videoUrl == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("سيظهر الفيديو الناتج هنا")
+                        }
+                    } else {
+                        VideoPlayer(videoUrl = viewModel.videoUrl!!)
+                    }
                 }
-                GenerateState.SUCCESS -> {
-                    Text("تم التوليد بنجاح!", color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    if (videoUrl != null) {
-                        VideoPlayer(videoUrl = videoUrl!!)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            Button(onClick = {
-                                downloadVideo(context, videoUrl!!)
-                            }) {
-                                Text("تنزيل الفيديو")
-                            }
-                            Button(onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(videoUrl))
-                                context.startActivity(intent)
-                            }) {
-                                Text("فتح في المتصفح")
-                            }
+                
+                if (viewModel.videoUrl != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val date = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+                        Text(
+                            text = "${viewModel.selectedModel} - $date",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Button(onClick = {
+                            downloadVideo(context, viewModel.videoUrl!!)
+                        }) {
+                            Text("تحميل")
                         }
                     }
                 }
-                else -> {}
             }
         }
     }
+}
+
+fun getFileSize(context: Context, uri: Uri): Long {
+    var size = 0L
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+        if (cursor.moveToFirst() && sizeIndex != -1) {
+            size = cursor.getLong(sizeIndex)
+        }
+    }
+    return size
+}
+
+fun getFileName(context: Context, uri: Uri): String? {
+    var name: String? = null
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (cursor.moveToFirst() && nameIndex != -1) {
+            name = cursor.getString(nameIndex)
+        }
+    }
+    return name
+}
+
+@Composable
+fun VideoPlayer(videoUrl: String) {
+    val context = LocalContext.current
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { exoPlayer.release() }
+    }
+
+    AndroidView(
+        factory = {
+            PlayerView(context).apply {
+                player = exoPlayer
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
 }
 
 fun downloadVideo(context: Context, url: String) {
@@ -182,34 +320,4 @@ fun downloadVideo(context: Context, url: String) {
         Toast.makeText(context, "فشل بدء التحميل", Toast.LENGTH_SHORT).show()
         e.printStackTrace()
     }
-}
-
-@Composable
-fun VideoPlayer(videoUrl: String) {
-    val context = LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(Uri.parse(videoUrl))
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    AndroidView(
-        factory = {
-            PlayerView(context).apply {
-                player = exoPlayer
-            }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(250.dp)
-    )
 }

@@ -1,61 +1,121 @@
 package com.example.ui.connect
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Router
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 
 @Composable
 fun ConnectScreen(
     viewModel: ConnectViewModel,
-    onConnected: (String) -> Unit
+    navController: NavController
 ) {
-    val url by viewModel.url.collectAsStateWithLifecycle()
-    val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val serverUrl = viewModel.serverUrl
+    val isConnecting = viewModel.isConnecting
+    val errorMessage = viewModel.errorMessage
 
-    LaunchedEffect(isConnected) {
-        if (isConnected && url.isNotBlank()) {
-            Toast.makeText(context, "تم الاتصال بنجاح", Toast.LENGTH_SHORT).show()
-            onConnected(url)
-        }
-    }
+    val isError = (errorMessage != null) || (serverUrl.isNotEmpty() && !serverUrl.contains(".gradio.live"))
+    val isUrlValid = serverUrl.contains(".gradio.live") && serverUrl.isNotBlank()
 
-    Scaffold(
-        topBar = {
-            @OptIn(ExperimentalMaterial3Api::class)
-            TopAppBar(title = { Text("Connect to AI Server") })
-        }
-    ) { padding ->
+    Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("أدخل رابط خادم Gradio للبدء", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(24.dp))
-            OutlinedTextField(
-                value = url,
-                onValueChange = viewModel::onUrlChange,
-                label = { Text("Server URL (e.g. https://xxx.gradio.live)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+            Icon(
+                imageVector = Icons.Default.Router,
+                contentDescription = "Router Icon",
+                modifier = Modifier.size(120.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
+            
             Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                text = "ربط الخادم الذكي",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "الصق الرابط الناتج من تشغيل الكود في Google Colab",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { viewModel.updateUrl(it) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("رابط Gradio (مثل https://xxxx.gradio.live)") },
+                singleLine = true,
+                isError = isError,
+                trailingIcon = {
+                    if (serverUrl.isNotEmpty()) {
+                        if (isUrlValid) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = "Valid", tint = androidx.compose.ui.graphics.Color.Green)
+                        } else {
+                            Icon(Icons.Default.Error, contentDescription = "Invalid", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            )
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.align(Alignment.Start).padding(top = 4.dp, start = 16.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
             Button(
-                onClick = viewModel::connect,
-                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("connect_button")
+                onClick = { viewModel.onConnectClick(navController) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = isUrlValid && !isConnecting
             ) {
-                Text("Connect")
+                if (isConnecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("الاتصال بالخادم")
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(48.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Text(
+                    text = "إذا لم يكن لديك رابط، شغّل الكود على Colab أولاً",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

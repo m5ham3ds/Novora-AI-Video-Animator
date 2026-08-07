@@ -16,8 +16,9 @@ import com.example.ui.connect.ConnectScreen
 import com.example.ui.connect.ConnectViewModel
 import com.example.ui.generate.GenerateScreen
 import com.example.ui.generate.GenerateViewModel
+import com.example.ui.history.HistoryScreen
+import com.example.ui.history.HistoryViewModel
 import com.example.ui.theme.MyApplicationTheme
-import java.net.URLEncoder
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -46,27 +47,25 @@ fun NovoraApp() {
             val connectViewModel: ConnectViewModel = viewModel(factory = ConnectViewModel.Factory)
             ConnectScreen(
                 viewModel = connectViewModel,
-                onConnected = { url ->
-                    val encoded = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
-                    navController.navigate("generate/$encoded") {
-                        popUpTo("connect") { inclusive = true }
-                    }
-                }
+                navController = navController
             )
         }
-        composable("generate/{baseUrl}") { backStackEntry ->
-            val encodedUrl = backStackEntry.arguments?.getString("baseUrl") ?: ""
+        composable("generate?serverUrl={serverUrl}") { backStackEntry ->
+            val encodedUrl = backStackEntry.arguments?.getString("serverUrl") ?: ""
             val baseUrl = URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString())
             
             val generateViewModel: GenerateViewModel = viewModel(factory = GenerateViewModel.Factory)
             GenerateScreen(
                 viewModel = generateViewModel,
-                baseUrl = baseUrl,
-                onBack = {
-                    navController.navigate("connect") {
-                        popUpTo("generate") { inclusive = true }
-                    }
-                }
+                serverUrl = baseUrl,
+                navController = navController
+            )
+        }
+        composable("history") {
+            val historyViewModel: HistoryViewModel = viewModel(factory = HistoryViewModel.Factory)
+            HistoryScreen(
+                viewModel = historyViewModel,
+                navController = navController
             )
         }
     }

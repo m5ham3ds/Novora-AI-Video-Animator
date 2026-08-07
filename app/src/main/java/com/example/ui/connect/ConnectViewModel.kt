@@ -1,20 +1,23 @@
 package com.example.ui.connect
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import androidx.lifecycle.viewmodel.CreationExtras
+import androidx.navigation.NavController
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.CreationExtras
-import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 val Context.dataStore by preferencesDataStore(name = "novora_prefs")
 
@@ -28,34 +31,52 @@ class ConnectViewModel(private val context: Context) : ViewModel() {
             }
         }
     }
+
     private val URL_KEY = stringPreferencesKey("server_url")
 
-    private val _url = MutableStateFlow("")
-    val url = _url.asStateFlow()
-
-    private val _isConnected = MutableStateFlow(false)
-    val isConnected = _isConnected.asStateFlow()
+    var serverUrl by mutableStateOf("")
+        private set
+    var isConnecting by mutableStateOf(false)
+        private set
+    var errorMessage by mutableStateOf<String?>(null)
+        private set
 
     init {
         viewModelScope.launch {
             val savedUrl = context.dataStore.data.map { prefs -> prefs[URL_KEY] ?: "" }.first()
-            _url.value = savedUrl
+            serverUrl = savedUrl
         }
     }
 
-    fun onUrlChange(newUrl: String) {
-        _url.value = newUrl
+    fun updateUrl(newUrl: String) {
+        serverUrl = newUrl
+        errorMessage = null
     }
 
-    fun connect() {
-        val currentUrl = _url.value
-        if (currentUrl.isNotBlank()) {
-            viewModelScope.launch {
-                context.dataStore.edit { prefs ->
-                    prefs[URL_KEY] = currentUrl
-                }
-                _isConnected.value = true
+    fun onConnectClick(navController: NavController) {
+        if (serverUrl.isBlank()) return
+        
+        var finalUrl = serverUrl.trim()
+        if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) {
+            finalUrl = "https://$finalUrl"
+        }
+        
+        if (!finalUrl.contains(Regex("""\.gradio\.live"""))) {
+            errorMessage = "يجب أن يحتوي الرابط على .gradio.live"
+            return
+        }
+
+        viewModelScope.launch {
+            isConnecting = true
+            context.dataStore.edit { prefs ->
+                prefs[URL_KEY] = finalUrl
             }
+            // Navigate
+            val encoded = URLEncoder.encode(finalUrl, StandardCharsets.UTF_8.toString())
+            navController.navigate("generate?serverUrl=$encoded") {
+                popUpTo("connect") { inclusive = true }
+            }
+            isConnecting = false
         }
     }
 }
