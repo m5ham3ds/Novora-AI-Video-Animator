@@ -1,0 +1,6 @@
+{
+  "name": "Novora",
+  "description": "AI-powered video generation using Gradio servers",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
